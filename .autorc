@@ -1,0 +1,11 @@
+{
+  "plugins": [
+    "git-tag",
+    "all-contributors",
+    "first-time-contributor",
+    "released"
+  ],
+  "owner": "woodsandwalker",
+  "repo": "container-tp79bg",
+  "name": "woodsandwalker",
+}
