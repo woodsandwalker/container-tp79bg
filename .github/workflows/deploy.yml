@@ -1,0 +1,49 @@
+name: Deploy
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  Deploy:
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "🎉 The job was automatically triggered by a ${{ github.event_name }} event."
+      - run: echo "🐧 This job is now running on a ${{ runner.os }} server."
+      - run: echo "🔎 The name of your branch is ${{ github.ref }} and your repository is ${{ github.repository }}."
+      - name: Check out repository code
+        uses: actions/checkout@v3
+      - run: echo "💡 The ${{ github.repository }} repository has been cloned to the runner."
+      - name: List files in the repository
+        run: |
+          ls ${{ github.workspace }}
+      - name: Deploy
+        run: |
+          set -x
+          mkdir -p ~/.ssh
+          ssh-keyscan ${{ secrets.DOKKU_HOST }}>> ~/.ssh/known_hosts
+          eval `ssh-agent -s`
+          ssh-add - <<< "${{ secrets.DOKKU_SSH_PRIVATE_KEY}}"
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C dokku apps:create container-tp79bg || true
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C dokku builder:set container-tp79bg build-dir src
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku builder-dockerfile:set container-tp79bg dockerfile-path Dockerfile"
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg RAILS_DEVELOPMENT_HOSTS=container-tp79bg.containers.anotherwebservice.com"
+          # Database connection string (rails)
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg DATABASE_URL=${{ secrets.RAILS_DATABASE_URL }}"
+          # Database connection string (django)
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY}}"
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg ALLOWED_HOSTS='container-tp79bg.containers.anotherwebservice.com'"
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg DEBUG=${{ secrets.DJANGO_DEBUG}}"
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg DB_ENGINE=${{ secrets.DJANGO_ENGINE}}"
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg DB_NAME=${{ secrets.DJANGO_DB_NAME}}"
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg DB_HOST=${{ secrets.DJANGO_DB_HOST }}"
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg DB_USER=${{ secrets.DJANGO_DB_USER}}"
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg DB_PASSWORD=${{ secrets.DJANGO_DB_PASSWORD}}"
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku config:set --no-restart container-tp79bg DB_PORT=${{ secrets.DJANGO_DB_PORT}}"
+
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku git:sync --build container-tp79bg" https://github.com/woodsandwalker/container-tp79bg.git main
+          # Assign letsencrypt wildcard certificate
+          ssh dokku@${{ secrets.DOKKU_HOST }} -C "dokku certs:add container-tp79bg < cert-key.tar"
+
